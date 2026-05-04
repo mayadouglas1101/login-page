@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Secure Terminal</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #00ff88;
+      --dim-green: #00aa55;
+      --dark: #090e0a;
+      --panel: #0c1410;
+      --border: #1a3a22;
+      --red: #ff3b3b;
+      --amber: #ffcc00;
+    }
+
+    body {
+      background: var(--dark);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* CRT flicker */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.5) 100%);
+      pointer-events: none;
+      z-index: 998;
+    }
+
+    .page {
+      display: none;
+      width: 100%;
+      max-width: 720px;
+      padding: 2rem;
+      animation: fadeIn 0.6s ease;
+    }
+    .page.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── LOGIN ── */
+    .login-box {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      padding: 2.5rem 3rem;
+      position: relative;
+    }
+    .login-box::before {
+      content: '[ RESTRICTED ACCESS — CASE FILE #0742 ]';
+      position: absolute;
+      top: -0.75rem;
+      left: 1rem;
+      background: var(--panel);
+      padding: 0 0.5rem;
+      font-size: 0.7rem;
+      color: var(--dim-green);
+      letter-spacing: 2px;
+    }
+
+    .terminal-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .terminal-header .logo {
+      font-family: 'VT323', monospace;
+      font-size: 3.5rem;
+      color: var(--green);
+      text-shadow: 0 0 20px rgba(0,255,136,0.5);
+      letter-spacing: 8px;
+    }
+    .terminal-header .sub {
+      font-size: 0.72rem;
+      color: var(--dim-green);
+      letter-spacing: 3px;
+      margin-top: 0.3rem;
+    }
+
+    .field { margin-bottom: 1.4rem; }
+    .field label {
+      display: block;
+      font-size: 0.72rem;
+      letter-spacing: 3px;
+      color: var(--dim-green);
+      margin-bottom: 0.5rem;
+    }
+    .field label::before { content: '> '; }
+
+    .field input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1.1rem;
+      padding: 0.4rem 0;
+      outline: none;
+      caret-color: var(--green);
+      transition: border-color 0.2s;
+    }
+    .field input:focus { border-bottom-color: var(--green); }
+
+    .btn {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.9rem;
+      letter-spacing: 3px;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      margin-top: 0.5rem;
+      text-transform: uppercase;
+    }
+    .btn:hover { background: var(--green); color: var(--dark); }
+
+    .btn-next {
+      display: inline-block;
+      margin-top: 2.5rem;
+      padding: 0.75rem 2.5rem;
+      width: auto;
+    }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.78rem;
+      letter-spacing: 2px;
+      margin-top: 1rem;
+      display: none;
+    }
+    .error-msg.show { display: block; }
+
+    .blink {
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* ── ENTRY ── */
+    .entry-box {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      padding: 2.5rem 3rem;
+      position: relative;
+    }
+    .entry-box::before {
+      content: '[ RECOVERED LOG — PERSONAL DEVICE — LAST SYNC: 04/25 02:31 ]';
+      position: absolute;
+      top: -0.75rem;
+      left: 1rem;
+      background: var(--panel);
+      padding: 0 0.5rem;
+      font-size: 0.68rem;
+      color: var(--amber);
+      letter-spacing: 2px;
+    }
+
+    .entry-meta {
+      font-size: 0.72rem;
+      color: var(--dim-green);
+      letter-spacing: 2px;
+      margin-bottom: 1.8rem;
+      line-height: 1.8;
+    }
+    .entry-meta span { color: var(--green); }
+
+    .entry-title {
+      font-family: 'VT323', monospace;
+      font-size: 2rem;
+      color: var(--amber);
+      letter-spacing: 4px;
+      margin-bottom: 1.5rem;
+      text-shadow: 0 0 10px rgba(255,204,0,0.3);
+    }
+
+    .entry-body {
+      font-size: 0.95rem;
+      line-height: 2;
+      color: #cce8d8;
+    }
+    .entry-body p { margin-bottom: 1.2rem; }
+    .entry-body .signature {
+      margin-top: 2rem;
+      color: var(--dim-green);
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+    }
+
+    /* ── THANKS ── */
+    .thanks-box {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      padding: 3rem;
+      text-align: center;
+      position: relative;
+    }
+    .thanks-box::before {
+      content: '[ END OF FILE ]';
+      position: absolute;
+      top: -0.75rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      padding: 0 0.75rem;
+      font-size: 0.7rem;
+      color: var(--dim-green);
+      letter-spacing: 3px;
+    }
+
+    .thanks-title {
+      font-family: 'VT323', monospace;
+      font-size: 3rem;
+      color: var(--green);
+      text-shadow: 0 0 20px rgba(0,255,136,0.4);
+      letter-spacing: 6px;
+      margin-bottom: 1rem;
+    }
+    .thanks-sub {
+      font-size: 0.85rem;
+      color: var(--dim-green);
+      letter-spacing: 2px;
+      line-height: 2;
+      margin-bottom: 2rem;
+    }
+    .thanks-body {
+      font-size: 0.92rem;
+      color: #cce8d8;
+      line-height: 2;
+      max-width: 520px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    .links-label {
+      font-size: 0.7rem;
+      letter-spacing: 3px;
+      color: var(--dim-green);
+      margin-bottom: 1.2rem;
+    }
+
+    .social-links {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .social-links a {
+      display: inline-block;
+      border: 1px solid var(--border);
+      color: var(--green);
+      text-decoration: none;
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      padding: 0.55rem 1.2rem;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+    .social-links a:hover {
+      border-color: var(--green);
+      background: var(--green);
+      color: var(--dark);
+    }
+    .social-links a .icon { margin-right: 0.4rem; }
+
+    .creator-sig {
+      margin-top: 2.5rem;
+      font-size: 0.75rem;
+      color: var(--dim-green);
+      letter-spacing: 2px;
+    }
+    .creator-sig span { color: var(--green); }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════ PAGE 1 — LOGIN ═══════════════════ -->
+  <div class="page active" id="page-login">
+    <div class="login-box">
+      <div class="terminal-header">
+        <div class="logo">LOGIN</div>
+        <div class="sub">MISSING PERSONS — DIGITAL EVIDENCE PORTAL</div>
+      </div>
+
+      <div class="field">
+        <label>USERNAME</label>
+        <input type="text" id="username" autocomplete="off" spellcheck="false" placeholder="identify yourself_" />
+      </div>
+      <div class="field">
+        <label>PASSKEY</label>
+        <input type="password" id="password" placeholder="••••" />
+      </div>
+
+      <button class="btn" onclick="tryLogin()">[ AUTHENTICATE ]</button>
+      <div class="error-msg" id="err">ACCESS DENIED — CREDENTIALS INVALID <span class="blink">█</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PAGE 2 — FINAL ENTRY ═══════════════════ -->
+  <div class="page" id="page-entry">
+    <div class="entry-box">
+      <div class="entry-meta">
+        AUTHOR&nbsp;&nbsp;&nbsp;: <span>MARCUS DELLWOOD</span><br/>
+        DATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <span>APRIL 25 — 02:31 LOCAL</span><br/>
+        DEVICE&nbsp;&nbsp;&nbsp;: <span>PERSONAL ENCRYPTED JOURNAL — OFFLINE</span><br/>
+        STATUS&nbsp;&nbsp;&nbsp;: <span style="color:var(--amber)">LAST KNOWN ENTRY</span>
+      </div>
+
+      <div class="entry-title">ENTRY #214 — "THAT'S A WRAP"</div>
+
+      <div class="entry-body">
+        <p>
+          If you're reading this, you cracked it. Good. I always said the passkey would be the easy part.
+        </p>
+        <p>
+          I know what the headlines said. I know what my apartment looked like when they found it —
+          chairs knocked over, laptop gone, half a cup of coffee on the counter. Made for a good story.
+          But here's the truth: I planned every bit of it. The coffee included. (Two hours old by the
+          time I walked out. Nice touch, if I say so myself.)
+        </p>
+        <p>
+          I'm not dead. I'm not in danger. I'm sitting in a cabin off a logging road in the Cascades
+          with sixty-three books I never had time to read, a hand-crank radio, and more silence than
+          I've heard in twelve years of city living. It's <em>extraordinary</em>.
+        </p>
+        <p>
+          The world moves too fast to notice when one person steps off. You proved that — it took
+          this long just to get here, and all it cost you was a four-digit code.
+          Everything I wanted to leave behind is still out there spinning without me,
+          and I couldn't be happier about it.
+        </p>
+        <p>
+          Tell them I'm fine. Tell them Marcus Dellwood found exactly what he was looking for —
+          just not where anyone thought to search.
+        </p>
+        <p>
+          Don't come looking. I'll come back when I'm ready. Or I won't. Either way, I'll be okay.
+        </p>
+        <div class="signature">
+          — M.D. <span class="blink">█</span><br/>
+          <small style="font-size:0.68rem; letter-spacing:1px; color: #4a7a5a;">
+            [ END OF RECOVERABLE DATA — NO FURTHER ENTRIES ]
+          </small>
+        </div>
+      </div>
+
+      <div style="text-align:right;">
+        <button class="btn btn-next" onclick="goTo('page-thanks')">NEXT &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PAGE 3 — THANK YOU ═══════════════════ -->
+  <div class="page" id="page-thanks">
+    <div class="thanks-box">
+      <div class="thanks-title">THANK YOU</div>
+      <div class="thanks-sub">
+        FROM THE DESK OF THE CTF CREATOR
+      </div>
+
+      <div class="thanks-body">
+        Hey — you made it to the end, and that genuinely means a lot.<br/><br/>
+        This CTF was a labor of love, late nights, and way too much overthinking every single puzzle.
+        If you had fun, if you got stuck and pushed through, if you argued with a teammate at 2am
+        over a cipher — then it did exactly what I hoped it would.<br/><br/>
+        Thank you for playing. Seriously. You're the reason it was worth building.
+      </div>
+
+      <hr class="divider"/>
+
+      <div class="links-label">FIND ME ONLINE</div>
+
+      <div class="social-links">
+        <a href="YOUR_DISCORD_INVITE_LINK_HERE" target="_blank">
+          <span class="icon">⌘</span> DISCORD
+        </a>
+        <a href="YOUR_LINKEDIN_URL_HERE" target="_blank">
+          <span class="icon">in</span> LINKEDIN
+        </a>
+        <a href="YOUR_INSTAGRAM_URL_HERE" target="_blank">
+          <span class="icon">◈</span> INSTAGRAM
+        </a>
+      </div>
+
+      <div class="creator-sig">
+        crafted with care by <span>MAYA</span> · 2026 <span class="blink">█</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function tryLogin() {
+      const user = document.getElementById('username').value.trim();
+      const pass = document.getElementById('password').value.trim();
+      const err  = document.getElementById('err');
+
+      if (user === 'thearcher' && pass === '0425') {
+        err.classList.remove('show');
+        goTo('page-entry');
+      } else {
+        err.classList.add('show');
+        document.getElementById('password').value = '';
+      }
+    }
+
+    document.getElementById('password').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') tryLogin();
+    });
+    document.getElementById('username').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+
+    function goTo(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      window.scrollTo(0, 0);
+    }
+  </script>
+</body>
+</html>
