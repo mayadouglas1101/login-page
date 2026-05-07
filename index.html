@@ -429,12 +429,24 @@
   </div>
 
   <script>
-    function tryLogin() {
+    const VALID = [
+      '89b0104187e471aa3439f20d7a867ff1fa3b071d8a864cefe884de2a16b7d2f4',
+      'ee260f08526f9930ff7d9450916b76a7ce3d2f4b924dfdb84dd0fa77dfa1d8aa'
+    ];
+
+    async function sha256(str) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function tryLogin() {
       const user = document.getElementById('username').value.trim();
       const pass = document.getElementById('password').value.trim();
       const err  = document.getElementById('err');
 
-      if (user === 'therunaway' && pass === '0525') {
+      const [uh, ph] = await Promise.all([sha256(user), sha256(pass)]);
+
+      if (uh === VALID[0] && ph === VALID[1]) {
         err.classList.remove('show');
         goTo('page-entry');
       } else {
