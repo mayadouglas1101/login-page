@@ -309,6 +309,91 @@
       letter-spacing: 2px;
     }
     .creator-sig span { color: var(--green); }
+
+    /* ── LEADERBOARD ── */
+    .lb-section {
+      margin-top: 2.5rem;
+      text-align: left;
+    }
+
+    .lb-submit-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+      margin: 1rem 0 0.5rem;
+    }
+    .lb-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      padding: 0.4rem 0;
+      outline: none;
+      caret-color: var(--green);
+      transition: border-color 0.2s;
+    }
+    .lb-input:focus { border-bottom-color: var(--green); }
+    .lb-input::placeholder { color: var(--dim-green); opacity: 0.6; }
+
+    .btn-lb {
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      padding: 0.5rem 1.2rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-lb:hover { background: var(--green); color: var(--dark); }
+    .btn-lb:disabled { opacity: 0.4; cursor: default; }
+
+    .lb-status {
+      font-size: 0.72rem;
+      letter-spacing: 2px;
+      color: var(--dim-green);
+      min-height: 1.2em;
+      margin-bottom: 1rem;
+    }
+
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .lb-table th {
+      color: var(--dim-green);
+      letter-spacing: 3px;
+      font-size: 0.68rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .lb-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid rgba(26,58,34,0.4);
+      color: #cce8d8;
+    }
+    .lb-table tr.lb-first td { color: var(--amber); }
+    .lb-table tr.lb-first td:first-child { color: var(--amber); }
+
+    .lb-refresh {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      color: var(--dim-green);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      padding: 0;
+    }
+    .lb-refresh:hover { color: var(--green); }
   </style>
 </head>
 <body>
@@ -425,10 +510,57 @@
         crafted with care by <span>MAYA</span> · 2026 <span class="blink">█</span>
         tolerated in the background by <span>MY HUSBAND</span> · 2026 <span class="blink">█</span>
       </div>
+
+      <hr class="divider"/>
+
+      <div class="lb-section">
+        <div class="links-label">SOLVERS — HALL OF RECORD</div>
+
+        <div id="lb-submit-form">
+          <div class="lb-submit-row">
+            <input class="lb-input" id="lb-name" type="text" maxlength="32"
+              autocomplete="off" spellcheck="false" placeholder="enter your callsign_" />
+            <button class="btn-lb" id="lb-btn" onclick="submitToLeaderboard()">[ LOG ENTRY ]</button>
+          </div>
+          <div class="lb-status" id="lb-status"></div>
+        </div>
+
+        <table class="lb-table">
+          <thead>
+            <tr>
+              <th>RANK</th>
+              <th>CALLSIGN</th>
+              <th>DATE</th>
+            </tr>
+          </thead>
+          <tbody id="lb-body">
+            <tr><td colspan="3" style="color:var(--dim-green);text-align:center;padding:1rem">LOADING...</td></tr>
+          </tbody>
+        </table>
+
+        <button class="lb-refresh" onclick="loadLeaderboard()">↻ REFRESH</button>
+      </div>
     </div>
   </div>
 
   <script>
+    // ── LEADERBOARD CONFIG ──────────────────────────────────────────────────
+    // Setup (free, no credit card):
+    //   1. Create a project at https://supabase.com
+    //   2. In the SQL Editor, run:
+    //        create table leaderboard (
+    //          id bigint generated always as identity primary key,
+    //          name text not null,
+    //          submitted_at timestamptz default now()
+    //        );
+    //        alter table leaderboard enable row level security;
+    //        create policy "public insert" on leaderboard for insert with check (true);
+    //        create policy "public select" on leaderboard for select using (true);
+    //   3. Go to Project Settings → API, copy your Project URL and anon key below.
+    const SUPABASE_URL = 'https://gltdtlrntxlxitkgkrnl.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_HlTyhlGnzzpuHERrfAHmFA_zua2iPoE';
+    // ───────────────────────────────────────────────────────────────────────
+
     const VALID = [
       '89b0104187e471aa3439f20d7a867ff1fa3b071d8a864cefe884de2a16b7d2f4',
       'ee260f08526f9930ff7d9450916b76a7ce3d2f4b924dfdb84dd0fa77dfa1d8aa'
@@ -466,7 +598,106 @@
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       window.scrollTo(0, 0);
+      if (id === 'page-thanks') loadLeaderboard();
     }
+
+    const lbHeaders = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json'
+    };
+
+    async function submitToLeaderboard() {
+      const name = document.getElementById('lb-name').value.trim();
+      const status = document.getElementById('lb-status');
+      const btn = document.getElementById('lb-btn');
+
+      if (!name) { status.textContent = 'ENTER A CALLSIGN FIRST.'; return; }
+      if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+        status.textContent = 'LEADERBOARD NOT CONFIGURED YET.'; return;
+      }
+
+      btn.disabled = true;
+      status.textContent = 'TRANSMITTING...';
+
+      try {
+        const res = await fetch(SUPABASE_URL + '/rest/v1/leaderboard', {
+          method: 'POST',
+          headers: { ...lbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ name })
+        });
+
+        if (res.ok) {
+          document.getElementById('lb-submit-form').style.display = 'none';
+          await loadLeaderboard();
+        } else {
+          status.textContent = 'TRANSMISSION FAILED — TRY AGAIN.';
+          btn.disabled = false;
+        }
+      } catch {
+        status.textContent = 'CONNECTION ERROR.';
+        btn.disabled = false;
+      }
+    }
+
+    async function loadLeaderboard() {
+      if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+        renderLeaderboard([]);
+        return;
+      }
+      try {
+        const res = await fetch(
+          SUPABASE_URL + '/rest/v1/leaderboard?select=name,submitted_at&order=submitted_at.asc',
+          { headers: lbHeaders }
+        );
+        const data = await res.json();
+        renderLeaderboard(Array.isArray(data) ? data : []);
+      } catch {
+        renderLeaderboard([]);
+      }
+    }
+
+    function renderLeaderboard(entries) {
+      const tbody = document.getElementById('lb-body');
+      tbody.innerHTML = '';
+
+      if (entries.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.style.cssText = 'text-align:center;color:var(--dim-green);padding:1rem';
+        td.textContent = SUPABASE_URL === 'YOUR_SUPABASE_URL'
+          ? 'CONFIGURE SUPABASE TO ENABLE LEADERBOARD'
+          : 'NO ENTRIES YET — BE THE FIRST';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      entries.forEach((entry, i) => {
+        const tr = document.createElement('tr');
+        if (i === 0) tr.classList.add('lb-first');
+
+        const rankTd = document.createElement('td');
+        rankTd.textContent = i === 0 ? '★ #1' : '#' + (i + 1);
+
+        const nameTd = document.createElement('td');
+        nameTd.textContent = entry.name;
+
+        const dateTd = document.createElement('td');
+        const d = new Date(entry.submitted_at);
+        dateTd.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        tr.appendChild(rankTd);
+        tr.appendChild(nameTd);
+        tr.appendChild(dateTd);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('lb-name').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitToLeaderboard();
+    });
   </script>
 </body>
 </html>
